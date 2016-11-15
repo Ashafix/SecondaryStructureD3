@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<head>
+    <style>
+    </style>
+
+    <script type="text/javascript" src="https://d3js.org/d3.v3.min.js"></script>
+</head>
+<body>
+
+<div id='structure'></div>
+
+<script>
+
+
+function secondary_structure(dataset) {
+
+    //defines the colors of the bars and secondary structure elements
+    var color_structures = {
+        sheet: "rgb(235,235,0)",
+        helix: "rgb(230,0,0)",
+        loop: "rgb(71,181,71)",
+        confidence: "blue",
+        helix_fill: "grey",
+        helix_stroke: "black"
+    };
+    var distances = {
+        bar_width: 20, //width of the bars shown in confidence chart
+        bar_height: 15, //height of the bars shown in confidence chart
+        bar_distance: 1, //horizontal distance between individual bars
+        helix_radius: 0.4, //relative radius of the helix structure
+        structure_height: 20, //height of the structure plot
+        sequence_height: 20, //height of the sequence text
+        graph_distance: 10, //distance between graph elements
+        font_size: 12, //size of the sequence text
+        stroke_width: 2
+    };
+    //defines the hover over tooltip
+    var tooltip = d3.select("body")
+        .append("div")
+        .style("position", "absolute")
+        .style("z-index", "10")
+        .style("visibility", "hidden")
+        .style("word-wrap", "break-word");
+    var s;
+    var h = 0; //total height
+    var bars = 0; //the number of bars
+    var offset = 0; //offset for bar location
+    var total_bars = 0; //number of bar charts
+    var txt = '';
+    var lineFunction = d3.svg.line()
+        .x(function (d) {
+            return d.x;
+        })
+        .y(function (d) {
+            return d.y;
+        })
+        .interpolate("bundle");
+
+    function bar(data, svg, pos, h, offset, name, total_bars) {
+        var g = svg.append('g')
+            .attr('id', 'g_' + name);
+
+        g.selectAll("rect")
+            .data(data)
+            .enter()
+            .append("rect")
+            .attr("width", distances.bar_width)
+            .attr("x", function (d, i) {
+                return i * (distances.bar_width + distances.bar_distance) + "px";
+            })
+            .attr("y", function (d) {
+                return (-1 + ((pos + 1) * h / total_bars) - d * distances.bar_height) + "px";
+            })
+            .attr("height", function (d) {
+                return 1 + d * distances.bar_height + "px";
+            })
+            .attr("fill", color_structures[name])
+            .on("mouseover", function (d, i) {
+                if (d3.select('div.selector' + i).attr('style').indexOf('visible') === -1) {
+                    d3.select('div.selector' + i).style('visibility', 'visible');
+                }
+                txt = '';
+                for (s in dataset) {
+                    console.log(s);
+                    txt += s.charAt(0).toUpperCase() + s.substr(1).toLowerCase() + ': ' + dataset[s][i] + '<br />';
+                    //tooltip.html('Helix: ' + dataset.helix[i] + '<br>Sheet: ' + dataset.sheet[i] + '<br>Loop: ' + dataset.loop[i]);
+                    tooltip.html(txt);
+                }
+            
+                //tooltip.html('Helix: ' + dataset.helix[i] + '<br>Sheet: ' + dataset.sheet[i] + '<br>Loop: ' + dataset.loop[i]);
+                return tooltip.style("visibility", "visible");
+            })
+            .on("mousemove", function () {
+                return tooltip.style("top", (event.pageY - 10) + "px").style("left", (event.pageX + 50) + "px");
+            })
+            .on("mouseout", function (d, i) {
+                d3.select('div.selector' + i).style('visibility', 'hidden');
+                return tooltip.style("visibility", "hidden");
+            });
+    }
+    function pipePath(pt1, r1, pt2, r2) {
+        var angle = Math.atan2(
+            pt2.x - pt1.x,
+            pt2.y - pt1.y
+        );
+
+        var l11 = [
+            pt1.x + r1 * Math.cos(-angle),
+            pt1.y + r1 * Math.sin(-angle)
+        ];
+        var l12 = [
+            pt2.x + r2 * Math.cos(-angle),
+            pt2.y + r2 * Math.sin(-angle)
+        ];
+        var l21 = [
+            pt1.x + r1 * Math.cos(-angle + Math.PI),
+            pt1.y + r1 * Math.sin(-angle + Math.PI)
+        ];
+        var l22 = [
+            pt2.x + r2 * Math.cos(-angle + Math.PI),
+            pt2.y + r2 * Math.sin(-angle + Math.PI)
+        ];
+        return "M" + l12 + "A" + [-r2, -r2] + " 0,0,1 " + l22 + "L" + l21 + "A" + [r1, r1] + " 0,0,1 " + l11 + "z";
+    }
+
+    function structure(dataset, offset) {
+        var g = d3.select("#structure").selectAll('svg').append('g')
+            .attr("id", "g_structure");
+        var background = g.append('g');
+        var foreground = g.append('g');
+
+        var i = -1;
+        var ii = 0;
+        var sel;
+        var points = [];
+        var c;
+        var style;
+        
+        while (i < dataset.length) {
+            i += 1;
+            //helix
+            if (dataset[i] === 'H') {
+                if (i === 0 || dataset[i - 1] !== 'H') {
+                    //start part
+                    points = [];
+                    points.push({'x': i * (distances.bar_width + distances.bar_distance) + (distances.bar_width + distances.bar_distance) * distances.helix_radius + 0.5 * distances.stroke_width, 'y': offset + (distances.structure_height / 2)});
+                    c = foreground.append('ellipse')
+                        .attr("rx", distances.bar_width * distances.helix_radius)
+                        .attr("cx", points[0].x)
+                        .attr("fill", color_structures.helix_fill)
+                        .attr("ry", ((distances.structure_height / 2) - distances.stroke_width) + "px")
+                        .attr("cy", points[0].y)
+                        .attr("stroke", color_structures.helix_stroke)
+                        .attr("stroke-width", distances.stroke_width);
+                } else if (dataset.length === i + 1 || dataset[i + 1] !== 'H') {
+                    //final part
+                    points.push({'x': 1 + i * (distances.bar_width + distances.bar_distance) + (distances.bar_width + distances.bar_distance) * distances.helix_radius + 0.5 * distances.stroke_width, 'y': offset + (distances.structure_height / 2)});
+                    c = background.append('ellipse')
+                        .attr("rx", distances.bar_width * distances.helix_radius)
+                        .attr("cx", points[1].x - 1)
+                        .attr("fill", color_structures.helix)
+                        .attr("ry", (distances.structure_height / 2) - distances.stroke_width)
+                        .attr("cy", points[1].y)
+                        .attr("stroke", color_structures.helix)
+                        .attr("stroke-width", 0);
+                    //points.push({'x': i * (distances.bar_width + distances.bar_distance) + (distances.bar_width + distances.bar_distance) * distances.helix_radius + distances.stroke_width - distances.bar_distance, 'y': offset + ((distances.structure_height / 2) + 2 * distances.bar_distance) - distances.stroke_width});
+
+                    c = background.append('path')
+                        .attr({fill: 'red', stroke: 'black', "stroke-width": distances.stroke_width})
+                        .attr('d', pipePath(points[0], (distances.structure_height / 2) - distances.stroke_width, points[1], (distances.structure_height / 2) - distances.stroke_width));
+                }
+            //sheets
+            } else if (dataset[i] === 'S') {
+                //final arrow
+                if (dataset.length === i + 1 || dataset[i + 1] !== 'S') {
+                    c = g.append('polygon')
+                    //left upper corner --> left lower corner --> right middle
+                        .attr('points', (i + 0.5) * (distances.bar_width + distances.bar_distance) + " " + offset + ", " + (i + 0.5) * (distances.bar_width + distances.bar_distance) + " " + (offset + distances.structure_height) + ", " + (i + 1) * (distances.bar_width + distances.bar_distance) + " " + (offset + (distances.structure_height / 2)))
+                        .attr("fill", color_structures.sheet);
+                    ii = i - 0.5;
+                } else {
+                    ii = i;
+                }
+
+                c = background.append('rect')
+                    .attr("x", 1 + ii * (distances.bar_width + distances.bar_distance) - distances.bar_distance + "px")
+                    .attr("y", offset + distances.structure_height / 4 + "px")
+                    .attr("width", distances.bar_width + distances.bar_distance)
+                    .attr("height", distances.structure_height / 2)
+                    .attr("fill", color_structures.sheet)
+                    .attr("id", "structure_id_" + i);
+
+            //loops
+            } else if (dataset[i] === 'L') {
+                if (i === 0 || dataset[i - 1] !== 'L') {
+                    points = [];
+                }
+                if (i > 0 && dataset[i - 1] !== 'L') {
+                    points.push({"x": i * (distances.bar_width + distances.bar_distance), y: offset + (distances.structure_height / 2)});
+                    points.push({"x": i * (distances.bar_width + distances.bar_distance), y: (offset + ((i + 1) % 2) * distances.structure_height)});
+                }
+                points.push({"x": i * (distances.bar_width + distances.bar_distance), y: (offset + ((i + 1) % 2) * distances.structure_height)});
+                points.push({"x": (i + 1) * (distances.bar_width + distances.bar_distance), y: (offset + (i % 2) * distances.structure_height)});
+                if (i + 1 === dataset.length || dataset[i + 1] !== 'L') {
+                    points.push({"x": (i + 1) * (distances.bar_width + distances.bar_distance), y: (offset + (i % 2) * distances.bar_width)});
+                    points.push({"x": (i + 1) * (distances.bar_width + distances.bar_distance), y: offset + (distances.structure_height / 2)});
+                    c = background.append('path')
+
+                        .attr("d", lineFunction(points))
+                        .attr("stroke", color_structures.loop)
+                        .attr("stroke-width", distances.stroke_width)
+                        .attr("fill", "none")
+                        .attr("id", "structure_id_" + i);
+
+                }
+            }
+
+            sel = d3.select("#structure").append('div');
+            sel.attr("class", 'selector' + i);
+            style = 'position:absolute';
+            style += ";left:" + (8 + (i * (distances.bar_width + distances.bar_distance))) + "px";
+            style += ";top:" + 0 + "px";
+            style += ";width:" + (distances.bar_width + distances.bar_distance) + "px";
+            style += ";height:" + h + "px";
+            style += ";opacity:" + "0.3";
+            style += ";visibility:hidden";
+            style += ";z-index:20";
+            sel.attr("style", "background-color:" + 'rgb(100,100,100);' + style);
+        }
+    }
+
+
+    for (s in dataset) {
+        switch (s) {
+        case "sequence":
+            h += distances.sequence_height;
+            break;
+        case "structure":
+            h += distances.structure_height + distances.graph_distance;
+            break;
+        case "helix":
+        case "sheet":
+        case "loop":
+        case "confidence":
+            h += distances.bar_height + distances.graph_distance;
+            bars += 1;
+            break;
+        default:
+            break;
+        }
+    }
+
+    var w = dataset.sequence.length * (distances.bar_width + distances.bar_distance) + 5;
+
+    var svg = d3.select("#structure")
+        .append("svg")
+        .attr("width", w)
+        .attr("height", h)
+        .attr("x", 0)
+        .attr("y", 0);
+
+
+    for (s in dataset) {
+        switch (s) {
+        case 'sheet':
+        case 'helix':
+        case 'loop':
+        case 'confidence':
+            total_bars += 1;
+            break;
+        default:
+            break;
+        }
+    }
+    
+    for (s in dataset) {
+        switch (s) {
+        case 'sheet':
+        case 'helix':
+        case 'loop':
+        case 'confidence':
+            bar(dataset[s], svg, offset, bars * (distances.bar_height + distances.graph_distance), offset * distances.graph_distance, s, total_bars);
+            offset += 1;
+            break;
+        default:
+            break;
+        }
+    }
+    structure(dataset.structure, bars * (distances.bar_height + distances.graph_distance) + distances.graph_distance);
+    
+    g = svg.append('g');
+    svg = g.selectAll("text")
+        .data(dataset.sequence)
+        .enter()
+        .append("text")
+        .attr("x", function (d, i) {
+            return (distances.bar_width / 4) + i * (distances.bar_width + distances.bar_distance) + "px";
+        })
+        .attr("y", function (d, i) {
+            return h;
+        })
+        .text(function (d) {
+            return d;
+        })
+        .style("font-size", distances.font_size + "px");
+}
+
+var dataset = {
+    sequence: ['L', 'L', 'L', 'A', 'G', 'G', 'G', 'G', 'P', 'A', 'A', 'A', 'A', 'G', 'G', 'G', 'G', 'P', 'A', 'A', 'A', 'A', 'G', 'G', 'G', 'G', 'P', 'A', 'A', 'A', 'A', 'G', 'G', 'G', 'G', 'P', 'A', 'A', 'A', 'A', 'G', 'G', 'G', 'G', 'P', 'A', 'A', 'A', 'A', 'G', 'G', 'G', 'G', 'P'],
+    helix: [1.0, 0.9, 0.8, 0.9, 0.1, 0.1, 0.1, 0.1, 0.0, 1.0, 0.9, 0.8, 0.9, 0.1, 0.1, 0.1, 0.1, 0.0, 1.0, 0.9, 0.8, 0.9, 0.1, 0.1, 0.1, 0.1, 0.0, 1.0, 0.9, 0.8, 0.9, 0.1, 0.1, 0.1, 0.1, 0.0, 1.0, 0.9, 0.8, 0.9, 0.1, 0.1, 0.1, 0.1, 0.0, 1.0, 0.9, 0.8, 0.9, 0.1, 0.1, 0.1, 0.1, 0.0],
+    sheet: [0.0, 0.1, 0.2, 0.3, 1.0, 0.9, 0.8, 0.1, 0.0, 0.0, 0.1, 0.2, 0.3, 1.0, 0.9, 0.8, 0.1, 0.0, 0.0, 0.1, 0.2, 0.3, 1.0, 0.9, 0.8, 0.1, 0.0, 0.0, 0.1, 0.2, 0.3, 1.0, 0.9, 0.8, 0.1, 0.0, 0.0, 0.1, 0.2, 0.3, 1.0, 0.9, 0.8, 0.1, 0.0, 0.0, 0.1, 0.2, 0.3, 1.0, 0.9, 0.8, 0.1, 0.0],
+    loop: [0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 1.0, 1.0, 0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 1.0, 1.0, 0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 1.0, 1.0, 0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 1.0, 1.0, 0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 1.0, 1.0, 0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 1.0, 1.0],
+    confidence: [0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 1.0, 1.0, 0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 1.0, 1.0, 0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 1.0, 1.0, 0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 1.0, 1.0, 0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 1.0, 1.0, 0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 1.0, 1.0],
+    structure: ['H', 'H', 'H', 'H', 'L', 'S', 'S', 'L', 'L', 'H', 'H', 'H', 'S', 'S', 'S', 'S', 'L', 'L', 'H', 'H', 'H', 'S', 'S', 'S', 'S', 'L', 'L', 'H', 'H', 'H', 'S', 'S', 'S', 'S', 'L', 'L', 'H', 'H', 'H', 'S', 'S', 'S', 'S', 'L', 'L', 'H', 'H', 'H', 'S', 'S', 'S', 'S', 'L', 'L']
+};
+secondary_structure(dataset);
+
+
+</script>
+
+</body>
